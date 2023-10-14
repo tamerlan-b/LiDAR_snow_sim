@@ -10,3 +10,5 @@ pyquaternion
 PyMieScatt
 pyqt5==5.14.0
 pyqtgraph==0.12.4
+open3d
+colorsys
