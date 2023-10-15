@@ -120,51 +120,57 @@ def dart_throwing(occupancy_ratio: float,
     # Initialize occupied area to 0.
     area_occupied = 0.0
 
+    R_0_sqr = R_0 ** 2
+
     # Calculate global occupied area across entire domain.
-    area_occupied_global = occupancy_ratio * PI * R_0 ** 2
+    area_occupied_global = occupancy_ratio * PI * R_0_sqr
 
     large_number = 1 / occupancy_ratio
     total = area_occupied_global * large_number + 1
 
     if show_progessbar:
-
         pbar = tqdm(total=total, desc='sampling particles',
                     bar_format='{desc}: {percentage:3.0f}%|{bar}|[{elapsed}<{remaining}, {rate_fmt}{postfix}]')
-
     else:
-
         pbar = None
 
     i = 0
     r_avg = 0
 
+    particle_diameter_scale = diameter_scale_parameter * 10
+
     # Main sampling loop.
     while area_occupied < area_occupied_global:
 
-        # Sample center of particle.
-        length = np.sqrt(rng.uniform(0, R_0 ** 2))
-        angle = rng.uniform(0, 2) * PI
-
-        x = length * np.cos(angle)
-        y = length * np.sin(angle)
 
         particle_diameter = np.inf
         # Sample diameter of particle from exponential distribution (in millimeters).
         while particle_diameter > 20:   # limit diameter to a maximum of 2cm
-            particle_diameter = rng.exponential(diameter_scale_parameter * 10)
+            particle_diameter = rng.exponential(particle_diameter_scale)
 
         # Convert diameter to meters.
-        particle_diameter = particle_diameter / 1000
+        particle_diameter = particle_diameter * 0.001
+
+        particle_radius = particle_diameter * 0.5
 
         # Sample height of particle center relative to examined plane.
-        height = rng.uniform(-particle_diameter / 2, particle_diameter / 2)
+        height = rng.uniform(-particle_radius, particle_radius)
 
         # Calculate radius of disk that constitutes the intersection of the sampled ball with the examined plane.
-        disk_radius = np.sqrt((particle_diameter / 2) ** 2 - height ** 2)
+        disk_radius_sqr = (particle_radius) ** 2 - height ** 2
 
+        # Sample center of particle.
+        length_sqr = rng.uniform(0, R_0_sqr)
+        
         # If the disk includes the origin, reject the sample and continue.
-        if x ** 2 + y ** 2 <= disk_radius ** 2:
+        if length_sqr <= disk_radius_sqr:
             continue
+
+        length = np.sqrt(length_sqr)
+        angle = rng.uniform(0, 2) * PI
+        x = length * np.cos(angle)
+        y = length * np.sin(angle)
+        disk_radius = np.sqrt(disk_radius_sqr)
 
         # Check whether current particle overlaps with any particle that has already been sampled.
         sample_has_overlap = (samples[:, 0] - x) ** 2 + (samples[:, 1] - y) ** 2 <= (samples[:, 2] + disk_radius) ** 2
@@ -172,13 +178,11 @@ def dart_throwing(occupancy_ratio: float,
         # If yes, reject the sample and continue.
         if np.any(sample_has_overlap):
             continue
-
         else:
-
             r_avg = (r_avg * i + disk_radius) / (i+1)
             i += 1
 
-            area = PI * disk_radius ** 2
+            area = PI * disk_radius_sqr
             area_occupied += area
             samples = np.concatenate((samples, np.array([[x, y, disk_radius]])))
 
@@ -186,7 +190,6 @@ def dart_throwing(occupancy_ratio: float,
                 pbar.update(area * large_number)
                 pbar.set_postfix({'n_sampled': len(samples),
                                   'r_avg': r_avg})
-
     if pbar:
         pbar.n = total
         pbar.close()
